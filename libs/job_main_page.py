@@ -105,13 +105,13 @@ def compare_top_link_nodes(bSoup1, bSoup2):
             print("Apply link found")
             return False
     print("Printing bsoup11")
-    print(bSoup1)    
+    #print(bSoup1)    
     return(bSoup1.attrs.keys()==bSoup2.attrs.keys())
 
         
 # match the tags class or id with job detail or else
 TITLE_TAG = ["jobtitle", "job-title", "job title", "jobTitle-link", "jobs_list", "job description"]
-DATE_TAG= ["Posted", "last posted", "updated", "date-posted", "date"]
+DATE_TAG= ["Posted", "last posted", "updated", "date-posted", "date", "jobposted"]
 COUNTRY_TAG = ["country"]
 CITY_TAG = ["city"]
 STATE_TAG = ["state"]
@@ -195,6 +195,60 @@ class JobDataExtractor(object):
         
         
     def exploreSubTrees(self, node, root, depth):
+        #BFS upto root to depth level.
+        bDeque0 = Deque()
+        bDeque1 = Deque()
+        current = root
+        
+        bDeque0.addRear(current)
+        level = 0
+        print("exploreSubTrees1 with depth ", "%d" % (depth))
+        print(root)
+        print("--------------------------------------")
+        while((bDeque0.isEmpty() is False) or (bDeque1.isEmpty() is False)):
+            print("exploreSubTrees11")
+            if level == depth:
+                   break
+        
+            while (bDeque0.isEmpty() is False):
+                fBsoup = bDeque0.removeFront()    
+                for kid in fBsoup.children:     
+                    if(type(kid) != type(node)):
+                        print("Failed to find another kid...")
+                        continue
+                    bDeque1.addRear(kid) 
+        
+            level = level +1
+            if level == depth:
+                break
+            while (bDeque1.isEmpty() is False):
+                fBsoup = bDeque1.removeFront()    
+                for kid in fBsoup.children:     
+                    if(type(kid) != type(node)):
+                        print("Failed to find another kid...")
+                        continue
+                    bDeque0.addRear(kid) 
+        
+            level = level +1                    
+        
+        if level != depth:
+            print("LEVEL NOT EQUAL DEPTH" + "level is" "%d - %d" % (level, depth)) 
+            return False
+        print("exploreSubTrees2")        
+        while(bDeque0.isEmpty() is False):
+              fBsoup = bDeque0.removeFront()
+              print("exploreSubTrees23")             
+              if compare_top_link_nodes(fBsoup, node) is True:
+                return True
+        while(bDeque1.isEmpty() is False):
+              fBsoup = bDeque1.removeFront()
+              print("exploreSubTrees23")             
+              if compare_top_link_nodes(fBsoup, node) is True:
+                return True                
+        return False
+    """
+            
+    def exploreSubTrees(self, node, root, depth):
     #we need to find the node in rooted subtree. the node should be at 'depth'
     #when depth reach to 0 we need to find in all the siblings.
     #just find out the leftmost child and then traverse through siblings
@@ -228,24 +282,53 @@ class JobDataExtractor(object):
             if compare_top_link_nodes(sibs, node) is True:
                 return True        
         
-        return False    
+        for sibs in lstnode.parent.next_siblings:
+            if type(sibs) != type(lstnode):
+                continue
+            for kids in sibs.children:
+            
+                if type(kids) != type(lstnode):
+                    continue
+        
+                if compare_top_link_nodes(kids, node) is True:
+                    return True
+        
+        
+        
+        return False
+       
+    """
+    def validateCurrentForTopLink(self, current):
+        for attr in ATTRS:
+            if current.has_attr(attr):
+                #add your keyword to reject top links
+                if 'search-bar' in current[attr]:
+                    return False
+        return True           
     
     def locateEquivalentNode(self, bSoup):
         #we will find how much is the gap between the Link nodes, i.e similar node so that we can now what elements
         # can be in between.
-        depth = 0 # depth=0 in siblings, depth =1 cousins , depth2 = grand cousins
+        depth = 0 # depth=0 in siblings, depth =1 cousins , depth2 = second cousins
         current = bSoup
            
         while True:
             #explore all uncles
             print("Prinitng current....")
             print(current)
+            #is this is under any form or something...
+            if self.validateCurrentForTopLink(current) is False:
+                return -1
             for sibs in current.next_siblings:
                 if type(sibs) != type(current):
                     continue
                 if self.exploreSubTrees(bSoup, sibs, depth) is True:
                     return depth
             current = get_parent(current)
+             
+            if(type(current) != type(bSoup)):
+                print("Fatal: exist a node which has no soup type")
+                raise
             depth = depth + 1
             if depth > 10:
                 print("Oopps level has gone beyond 10...Please check with the top level link node found")
@@ -286,25 +369,33 @@ class JobDataExtractor(object):
         if len(self.possible_top_link_nodes) > 1:
             raise 
         topNode = self.possible_top_link_nodes[0]
+        topN = topNode
         num_sibs = len(topNode.siblings)
+        print("Total siblings found " "%d " % (num_sibs))
         start=0
-        while num_sibs >= 0:
-            for jobset in topNode.tupInfo:
+        while (num_sibs > 0):
+            print("Printing result for sib " "%d" % (num_sibs))
+            
+            for jobset in topN.tupInfo:
+                print(jobset)
                 rJobs = {}
+                
                 for jobs in jobset:
-                    print(jobs)
+                    print("Printing JobSet----")
+                    #print(jobs)
                     if jobs[0] == 'jobLink':
                         rlink = jobs[1]
                         if (('http') not in rlink):
                             rlink = "%s%s" % (self.url_base, rlink)
                         rJobs['Link'] = rlink
-                    elif jobs[0] == 'date':
+                    elif jobs[0] == 'Date':
                         rJobs['date'] = jobs [1]
                 jobList.append(rJobs)
-            topNode = topNode.siblings[start]
+            
+            topN = topNode.siblings[start]
             start = start + 1
             num_sibs = num_sibs-1    
-	    return (jobList)	       
+        return (jobList)	       
                             
     
     def extractNextPageLink(self, bsoup):
@@ -488,12 +579,14 @@ class JobDataExtractor(object):
                         
             print("Setting for the parent...")
             current = link
-            print(current)
+            #print(current)
+            
             while(maxd>0):
                 current = get_parent(current)
                 maxd = maxd -1
             print("Next top Link node located...finding all uncles..")
             print(current)
+            
             
             topNode = topLevelJobNode(current)
             self.extractInfoSubTrees(topNode)
@@ -501,7 +594,7 @@ class JobDataExtractor(object):
             self.possible_top_link_nodes.append(topNode)
               
             bSoup_visited.add(current)
-            self.markAllKidsVisited(current, bSoup_visited)
+            #self.markAllKidsVisited(current, bSoup_visited)
             
             
             for uncle in current.next_siblings:
@@ -510,13 +603,14 @@ class JobDataExtractor(object):
                 topN = topLevelJobNode(uncle)
                 self.extractInfoSubTrees(topN)
                 bSoup_visited.add(uncle)
-                self.markAllKidsVisited(uncle, bSoup_visited)
+                #self.markAllKidsVisited(uncle, bSoup_visited)
                 #href_in_uncle = uncle.find_all('a')
                 print("Printing uncle...")
                 topNode.addSibling(topN)
             
         #if multiple top links node found we need to delete them.                  
         if(len (self.possible_top_link_nodes) > 1 ):
+            print("Removing Redundant top node")
             self.removeRedundantNodes()
         
         # saving for Selenium to click
@@ -610,8 +704,10 @@ def exploreForTags(nBsoup):
     for attr in ATTRS:
         if nBsoup.has_attr(attr):
                 if attr is 'href':
-                    print(nBsoup['href'])
+                    
+                    print("HREF found" + nBsoup.get_text().encode('utf-8').strip())
                     tup_arr.append(('jobLink', nBsoup['href']))
+                    tup_arr.append(('jobLinkText', nBsoup.get_text()))
                     continue
                 if type(nBsoup[attr])==type([]):
                      
@@ -642,7 +738,7 @@ def exploreForTags(nBsoup):
                            
                 else:
                         val = nBsoup[attr].encode('utf-8').strip()
-                        print(val)
+                        #print(val)
                         if ifCityTagPresent(val):
                             print(nBsoup.get_text())
                             tup_arr.append(('CityName', nBsoup.get_text()))
@@ -667,6 +763,7 @@ def exploreForTags(nBsoup):
                             tup_arr.append(('JobType', nBsoup.get_text().encode('utf-8').strip()))
                
     print("Explored ..tag")
+    print(tup_arr)
     return tup_arr
 
 def exploreSiblings(current):
@@ -687,7 +784,7 @@ if __name__ == '__main__':
     jdata = JobDataExtractor(bsoup=BeautifulSoup(open("oracle.soup")))
     jdata.runExtractor()
     jdata.printAllLinks()
-    print(jdata.getAllResults())
+    jdata.getAllResults()
   
 
     

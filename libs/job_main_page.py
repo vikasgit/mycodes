@@ -13,6 +13,8 @@ from bs4.tests.test_tree import SiblingTest
 from numpy.f2py.auxfuncs import throw_error
 from urllib2 import urlparse
 from urlparse import urlparse
+import hashlib
+import json
 
 class Deque:
     def __init__(self):
@@ -45,8 +47,8 @@ class Deque:
 class WebDriver(object):
     def __init__(self):
         try:
-                #self.driver = webdriver.Chrome('./chromedriver')  # Optional argument, if not specified will search path.
-                self.driver = webdriver.Firefox()
+                self.driver = webdriver.Chrome('./chromedriver')  # Optional argument, if not specified will search path.
+                #self.driver = webdriver.Firefox()
         except:
                 print("Failed to open web driver")
                 raise
@@ -181,7 +183,73 @@ class JobDataExtractor(object):
         self.jobLinks = []
         self.possible_top_link_nodes = []   
         
-        self.current_page_number = 1   
+        self.current_page_number = 1
+        
+        self.job_links_visited = [] 
+        
+        self.hashOfVisitedNodes = []  
+    
+        #create directories for storing the results, bsoup pages.
+        rootpath = os.getcwd()
+        self.company_dirname = company
+        self.companydir = os.path.join(rootpath, company)
+        if not os.path.exists(self.companydir):
+            os.makedirs(self.companydir)
+        #bsoup dir
+        self.bsoupdir = os.path.join(self.companydir, "bsoup")
+        if not os.path.exists(self.bsoupdir):
+            os.makedirs(self.bsoupdir)  
+        
+        self.res_file = os.path.join(self.companydir, "results")   
+        data = []  # list of dic items
+        file = open(self.res_file, "w")
+        json.dump(data, file)
+        file.flush()
+        file.close
+   
+         
+    def saveResults(self, dicts=None):
+        if dict == None:
+            return
+        
+        file = open(self.res_file, "r+")
+        jsdata = json.loads(file.read())
+        jsdata.append(dicts)
+
+        file.seek(0)
+        file.truncate()
+
+        json.dump(jsdata, file)
+
+        file.flush()
+        file.close
+        
+    def convertTupsIntoDict(self, topN):
+        rJobs = {}
+        for jobset in topN.tupInfo:
+                print(jobset)
+                
+                
+                
+                #for jobs in jobset:
+                #    print(type(jobs))
+                # if type(jobs) is ():
+                if jobset[0] == 'jobLink':
+                    rlink = jobset[1]
+                    if (('http') not in rlink):
+                        rlink = "%s%s" % (self.url_base, rlink)
+                        rJobs['Link'] = rlink
+                elif jobset[0] == 'Date':
+                        rJobs['date'] = jobset [1]    
+        return rJobs
+            
+    def saveJobBsoupPage(self, bsoup, page_name):
+        file_name = os.path.join(self.bsoupdir, page_name)
+        if not os.path.isfile(file_name):
+            file = open(file_name, "w")
+            file.write(str(bsoup))
+            file.flush()
+            file.close()
     
     def addJobLink(self, href):
         self.job_links_href.append(href)
@@ -203,12 +271,11 @@ class JobDataExtractor(object):
         bDeque0.addRear(current)
         level = 0
         print("exploreSubTrees1 with depth ", "%d" % (depth))
-        print(root)
-        print("--------------------------------------")
+        
         while((bDeque0.isEmpty() is False) or (bDeque1.isEmpty() is False)):
             print("exploreSubTrees11")
             if level == depth:
-                   break
+                    break
         
             while (bDeque0.isEmpty() is False):
                 fBsoup = bDeque0.removeFront()    
@@ -236,15 +303,15 @@ class JobDataExtractor(object):
             return False
         print("exploreSubTrees2")        
         while(bDeque0.isEmpty() is False):
-              fBsoup = bDeque0.removeFront()
-              print("exploreSubTrees23")             
-              if compare_top_link_nodes(fBsoup, node) is True:
-                return True
+                fBsoup = bDeque0.removeFront()
+                print("exploreSubTrees23")             
+                if compare_top_link_nodes(fBsoup, node) is True:
+                    return True
         while(bDeque1.isEmpty() is False):
-              fBsoup = bDeque1.removeFront()
-              print("exploreSubTrees23")             
-              if compare_top_link_nodes(fBsoup, node) is True:
-                return True                
+                fBsoup = bDeque1.removeFront()
+                print("exploreSubTrees23")             
+                if compare_top_link_nodes(fBsoup, node) is True:
+                    return True                
         return False
     """
             
@@ -375,26 +442,32 @@ class JobDataExtractor(object):
         start=0
         while (num_sibs > 0):
             print("Printing result for sib " "%d" % (num_sibs))
-            
+            jobNode = []
+            self.saveResults(topN.tupInfo)
             for jobset in topN.tupInfo:
                 print(jobset)
+                
                 rJobs = {}
                 
-                for jobs in jobset:
-                    print("Printing JobSet----")
-                    #print(jobs)
-                    if jobs[0] == 'jobLink':
-                        rlink = jobs[1]
-                        if (('http') not in rlink):
-                            rlink = "%s%s" % (self.url_base, rlink)
+                #for jobs in jobset:
+                #    print(type(jobs))
+                # if type(jobs) is ():
+                if jobset[0] == 'jobLink':
+                    rlink = jobset[1]
+                    if (('http') not in rlink):
+                        rlink = "%s%s" % (self.url_base, rlink)
                         rJobs['Link'] = rlink
-                    elif jobs[0] == 'Date':
-                        rJobs['date'] = jobs [1]
-                jobList.append(rJobs)
+                elif jobset[0] == 'Date':
+                        rJobs['date'] = jobset [1]
+                jobNode.append(rJobs)        
+                         
+            jobList.append(jobNode)
+                 
             
             topN = topNode.siblings[start]
             start = start + 1
-            num_sibs = num_sibs-1    
+            num_sibs = num_sibs-1
+        print(jobList)        
         return (jobList)	       
                             
     
@@ -425,7 +498,7 @@ class JobDataExtractor(object):
                 """        
             """
             if link.get_text().strip() == "2":
-                print("Extracting Next page link1...")
+                print("Extracting Next page link1...")    
                 
                 sib = get_sibling(link)
                 if sib is not None:
@@ -436,7 +509,37 @@ class JobDataExtractor(object):
             #verify with "Next" keyword
             if (link.get_text().strip().lower() == "next"):
                 self.addNextLink(link.get_text())
-                return link['href']    
+                return link['href']
+                
+    
+    
+    def extractAllJobLinksInPage(self):
+        print("Total links in this page are " "%d" % (len(self.job_links_href)))
+        for jLink in self.job_links_href:
+                print("Going to load " '%s' % (jLink))
+                if jLink in self.job_links_visited:
+                    print("Already visited " "%s" % (jLink))
+                    continue
+                link=None
+                
+                try:
+                    
+                    link = self.wdriver.driver.find_element_by_partial_link_text(jLink)
+                    bsoup = BeautifulSoup(self.wdriver.get_driver().page_source, 'lxml')
+                    hash_object = hashlib.sha1(jLink)
+                    hex_dig = hash_object.hexdigest()
+                    self.saveJobBsoupPage(bsoup, str(hex_dig))
+                    self.job_links_visited.append(jLink)
+                                       
+                except:
+                    print("Skipping...looks like Webdriver could not find the job link")
+                    continue
+                time.sleep(6) 
+                link.click()      
+                #wdriver.driver.get(jLink)
+                time.sleep(8)
+                self.wdriver.driver.back()
+                time.sleep(8) 
        
             
     """
@@ -450,10 +553,43 @@ class JobDataExtractor(object):
     def runExtractor(self):
         self.extractAllHrefs(self.mnpage_bsoup)
         self.extractNextPageLink(self.mnpage_bsoup)
+        #self.extractAllJobLinksInPage()
+        self.clearAll()
+        
         
         if self.wdriver is None:
             return
-            
+        load_more = False
+        #check if page have "buttons to load more" rather next links
+        while (True):
+            next_link = None
+            LOAD_MORE = ["Load more jobs", "view more job"]
+            for text_more in LOAD_MORE:
+                try:
+                    #link = self.wdriver.driver.find_element_by_link_text(text_more)
+                    next_link = self.wdriver.driver.find_element_by_class_name('load-more')
+                    load_more = True
+                except:
+                    pass     
+            if next_link is None:
+                print("No load more found")
+                break
+                 
+             
+            next_link.click()
+            print("Goint to load next page")
+            time.sleep(10)
+            #wdriver.driver.get(selClickSaverPage.page_next_href)
+            bsoup = BeautifulSoup(self.wdriver.get_driver().page_source, 'lxml')
+            self.clearAll()
+            self.extractAllHrefs(bsoup)
+            self.extractNextPageLink(bsoup)
+            return
+            #self.extractAllJobLinksInPage() 
+        
+        if load_more is True:
+            return     
+              
         while self.page_next_href is not None:
             for jLink in self.job_links_href:
                 print("Going to load " '%s' % (jLink))
@@ -483,11 +619,12 @@ class JobDataExtractor(object):
             self.clearAll()
             self.extractAllHrefs(bsoup)
             self.extractNextPageLink(bsoup)
+            
    
     def ifNodeVisited(self, nBsoup, visitedNodes):
         #check if node or ancestor visited
-        depth = 8
-        parent = nBsoup.parent    
+        depth = 10
+        parent = nBsoup    
         while (depth>0 and (parent is not None)):
             if parent in visitedNodes:
                 return True
@@ -501,19 +638,56 @@ class JobDataExtractor(object):
     def removeRedundantNodes(self):
         for x in range (0, len(self.possible_top_link_nodes)-1):
             del self.possible_top_link_nodes[0]
+            
+    def extractHreftextForClickable(self, bSoup):
+        #return the longest string found among the kids and cureent
+        #longest string would help Selenium API to find the Click node fast.
+        #Chrome webdriver search is not responding with full text.          
+        texts = [text for text in bSoup.stripped_strings]
+        maxlen = 0
+        maxtext = None
+        rtext = None
+       
+        for text in texts:
+            if len(text) > maxlen:
+                maxlen = len(text)
+                maxtext= text
+        return maxtext.encode('utf-8').strip()       
+                 
       
     def extractClickableNodeText(self, tNode):
+        
         bNode = tNode.node
+            
+        try:
+            if bNode.name is 'a':
+                #return bNode.get_text().encode('utf-8').strip()
+                return self.extractHreftextForClickable(bNode)
+        except:   
+            pass
+        
+        print(bNode)
+        
         text = None
         bsoup = bNode.find_all('a')
+        print(len(bsoup))
+        
         for hrefs in bsoup:
+            print(hrefs)
             try:
-                text = hrefs.get_text()
+                text = self.extractHreftextForClickable(hrefs)
             except:
                 pass
                 text = None
-        
+        print("Printing clickable node text")
+        print(text)
         return text    
+
+    def getHashofJobNode(self, tNode):
+        
+        hash_object = hashlib.sha1(self.extractClickableNodeText(tNode))
+        hex_dig = hash_object.hexdigest()
+        return str(hex_dig)
 
     # if job top level node is visited then all kids should be makred visited 
     # We dont want to visit them again               
@@ -594,6 +768,12 @@ class JobDataExtractor(object):
             self.possible_top_link_nodes.append(topNode)
               
             bSoup_visited.add(current)
+            #self.saveResults(topNode.tupInfo)
+            nodeHash  = self.getHashofJobNode(topNode)
+            if nodeHash not in self.hashOfVisitedNodes:
+                self.hashOfVisitedNodes.append(nodeHash)
+                self.saveResults(self.convertTupsIntoDict(topNode))
+            
             #self.markAllKidsVisited(current, bSoup_visited)
             
             
@@ -603,6 +783,12 @@ class JobDataExtractor(object):
                 topN = topLevelJobNode(uncle)
                 self.extractInfoSubTrees(topN)
                 bSoup_visited.add(uncle)
+                nodeHash  = self.getHashofJobNode(topN)
+                if nodeHash not in self.hashOfVisitedNodes:
+                    self.hashOfVisitedNodes.append(nodeHash)
+                    self.saveResults(self.convertTupsIntoDict(topN))
+                else:
+                    continue
                 #self.markAllKidsVisited(uncle, bSoup_visited)
                 #href_in_uncle = uncle.find_all('a')
                 print("Printing uncle...")
@@ -629,6 +815,10 @@ def trySecondryLogicForTopLevelLink(hRef):
     if 'search-job' in normalize(hRef):
             return False
     if((('job') in normalize(hRef)) and re.search(re.compile('\d{4}'), normalize(hRef))):
+    #if((('jobid' or 'jobdetail' or 'job') in normalize(hRef)) and re.search(re.compile('\d{4}'), normalize(hRef))):
+        print("found title ")
+        return True
+    if((('jid') in normalize(hRef)) and re.search(re.compile('\d{4}'), normalize(hRef))):  # Google
     #if((('jobid' or 'jobdetail' or 'job') in normalize(hRef)) and re.search(re.compile('\d{4}'), normalize(hRef))):
         print("found title ")
         return True
@@ -707,7 +897,12 @@ def exploreForTags(nBsoup):
                     
                     print("HREF found" + nBsoup.get_text().encode('utf-8').strip())
                     tup_arr.append(('jobLink', nBsoup['href']))
-                    tup_arr.append(('jobLinkText', nBsoup.get_text()))
+                    #tup_arr.append(('jobLinkText', nBsoup.get_text()))
+                    args = 0
+                    for text in nBsoup.stripped_strings:
+                        key = "%s%d" % ("jobLinkText", args)
+                        args = args + 1
+                        tup_arr.append((key, text.encode('utf-8').strip()))
                     continue
                 if type(nBsoup[attr])==type([]):
                      
@@ -780,11 +975,13 @@ if __name__ == '__main__':
     url = "https://jobs.walmart.com/us/jobs?page=1&tags=ecommerce" 
     url = "https://krb-sjobs.brassring.com/TGnewUI/Search/Home/Home?partnerid=26059&siteid=5016##keyWordSearch=united%20states&locationSearch=&loggedIn=false"
     url = "https://oracle.taleo.net/careersection/2/joblist.ftl"
-    #jdata = JobDataExtractor(webdriver=WebDriver(),  url=url)
-    jdata = JobDataExtractor(bsoup=BeautifulSoup(open("oracle.soup")))
+    url = "https://www.amazon.jobs/en-gb/job_categories/software-development?base_query=&loc_query=&job_count=20&result_limit=10&sort=relevant&category%5B%5D=software-development&cache"
+    url = "https://www.amazon.jobs/en-gb/job_categories/software-development?base_query=&loc_query=&job_count=50&result_limit=50&sort=relevant&category%5B%5D=solutions-architect&cache"
+    jdata = JobDataExtractor(webdriver=WebDriver(), company="amazon", url=url)
+    #jdata = JobDataExtractor(company = "amazon", bsoup=BeautifulSoup(open("amazon.soup")))
     jdata.runExtractor()
     jdata.printAllLinks()
-    jdata.getAllResults()
+    #jdata.getAllResults()
   
 
     
